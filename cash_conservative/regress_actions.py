@@ -58,20 +58,31 @@ else:
     raw_observations = []
     intents = []
 
+    idle = 0
     for seed in seeds:
         raw_obs, _ = env.reset(seed=seed)
+        episode_obs = []
+        episode_intents = []
+        portfolios = []
         terminated = False
         while not terminated:
             norm_obs = np.clip((raw_obs - obs_mean) / np.sqrt(obs_var + 1e-8), -obs_clip, obs_clip).astype(np.float32)
             action, _ = model.predict(norm_obs, deterministic=True)
             action = int(action)
-            raw_observations.append(np.array(raw_obs, dtype=np.float64))
-            intents.append(action_intent[action])
+            episode_obs.append(np.array(raw_obs, dtype=np.float64))
+            episode_intents.append(action_intent[action])
             raw_obs, reward, terminated, truncated, info = env.step(action)
+            portfolios.append(info["portfolio_value"])
+        # same idle episode skip as interpret_rl.py
+        if max(portfolios) == min(portfolios):
+            idle += 1
+            continue
+        raw_observations.extend(episode_obs)
+        intents.extend(episode_intents)
 
     X_full = np.array(raw_observations)
     y = np.array(intents)
-    print(f"logged {len(y)} steps over {len(seeds)} episodes")
+    print(f"logged {len(y)} steps over {len(seeds) - idle} traded episodes ({idle} idle ones dropped)")
 
     # standardize so the coefs are comparable
     X = X_full[:, feature_indices]

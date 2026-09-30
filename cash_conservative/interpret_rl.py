@@ -35,10 +35,12 @@ else:
 
     records = [] # one row per step, every episode
 
+    idle = 0
     for seed in seeds:
         obs, _ = env.reset(seed=seed)
         obs = np.clip((obs - obs_mean) / np.sqrt(obs_var + 1e-8), -obs_clip, obs_clip).astype(np.float32)
         price_trail = []
+        episode = []
         terminated = False
         while not terminated:
             action, _ = model.predict(obs, deterministic=True)
@@ -52,7 +54,7 @@ else:
             entry = env.market.history[-1]
             position_after = env.rl_agent.position
 
-            records.append({
+            episode.append({
                 "seed": seed,
                 "step": entry["step"],
                 "price": price,
@@ -66,8 +68,15 @@ else:
 
             price_trail.append(price)
 
+        # skip idle episodes, the portfolio never moved so its the same failure counted every step
+        portfolios = [r["portfolio"] for r in episode]
+        if max(portfolios) == min(portfolios):
+            idle += 1
+            continue
+        records.extend(episode)
+
     total = len(records)
-    print(f"\nlogged {total} steps over {len(seeds)} episodes")
+    print(f"\nlogged {total} steps over {len(seeds) - idle} traded episodes ({idle} idle ones dropped)")
 
     # a, overall action frequency
     print("\noverall action frequency:")
